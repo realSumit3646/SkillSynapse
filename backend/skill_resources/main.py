@@ -17,7 +17,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from typing import Dict, List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -342,13 +342,15 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
+router = APIRouter(tags=["skill-resources"])
 
-@app.get("/health")
+
+@router.get("/health")
 async def health() -> Dict[str, str]:
 	return {"status": "ok", "service": "skill-transition-resource-fetcher"}
 
 
-@app.post("/get-resources", response_model=TransitionResponse)
+@router.post("/get-resources", response_model=TransitionResponse)
 async def get_resources(request: TransitionRequest) -> TransitionResponse:
 	from_skill = request.from_skill.strip()
 	to_skill = request.to_skill.strip()
@@ -362,6 +364,9 @@ async def get_resources(request: TransitionRequest) -> TransitionResponse:
 			resources=resources,
 		)
 	)
+
+
+app.include_router(router)
 
 
 if __name__ == "__main__":
