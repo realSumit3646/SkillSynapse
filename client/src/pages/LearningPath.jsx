@@ -353,7 +353,7 @@ export default function LearningPath() {
                         </div>
                     </div>
 
-                    <div className="mt-5 h-[70vh] min-h-[40rem] rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,#f8fafc,#eef6ff)]">
+                    <div className="mt-5 h-[70vh] min-h-160 rounded-4xl border border-slate-200 bg-[linear-gradient(180deg,#f8fafc,#eef6ff)]">
                         <CytoscapeComponent
                             elements={elements}
                             stylesheet={cytoscapeStylesheet}
