@@ -22,7 +22,7 @@ It answers three critical questions in one flow:
 2. Which of those skills do I already have?
 3. What is the most effective sequence to close my gaps?
 
-## What Makes It Hackathon-Strong
+## Value Proposition
 
 - Real-world impact: solves a practical, high-frequency problem for students and professionals.
 - End-to-end product: analysis, scoring, roadmap generation, and learning resources.
