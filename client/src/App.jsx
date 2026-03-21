@@ -2,7 +2,6 @@ import { useState } from 'react'
 
 export default function App() {
   const [resumeFile, setResumeFile] = useState(null)
-  cont
   const [jobDescription, setJobDescription] = useState('')
 
   const handleFileChange = (event) => {
@@ -25,7 +24,7 @@ export default function App() {
               </p>
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
                 Resume Match
-              </h1>
+              </h1> 
               <p className="max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
                 Upload a resume, paste the job description, and submit both in
                 one step.
