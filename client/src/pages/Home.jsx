@@ -18,10 +18,18 @@ export default function App() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+
+    if (!resumeFile) {
+      console.error('No resume selected.')
+      return
+    }
+
     const formData = new FormData()
-    formData.append('resume', resumeFile)
-    formData.append('jobDescription', jobDescription)
-    const response = await fetch(`${backendUrl}/evaluate`, {
+    formData.append('file', resumeFile)
+    formData.append('job_description', jobDescription)
+    formData.append('user_feedback', '')
+
+    const response = await fetch(`${backendUrl}/analyze-skills`, {
       method: 'POST',
       body: formData,
     })

@@ -109,7 +109,28 @@ function buildGraphModel(learningPath) {
         };
     });
 
+    function ensureNode(id) {
+        if (!id || nodesById[id]) {
+            return;
+        }
+
+        nodesById[id] = {
+            id,
+            label: id,
+            track: resolveTrack(id, tracks),
+            difficulty: 0,
+            score: 0,
+            normalizedScore: 0,
+            time: "",
+            unlockPower: 0,
+            rank: 0,
+        };
+    }
+
     rawEdges.forEach((edge, index) => {
+        ensureNode(edge.from);
+        ensureNode(edge.to);
+
         const id = `${edge.from}-${edge.to}-${index}`;
         edgesById[id] = {
             id,
@@ -218,7 +239,7 @@ export default function LearningPath() {
     const navigate = useNavigate();
     const evaluationResult = state?.evaluationResult;
     const selfRatings = state?.selfRatings ?? {};
-    const learningPath = state?.learningPathResult ?? sampleLearningPath;
+    const learningPath = state?.learningPathResult ?? state?.evaluationResult ?? sampleLearningPath;
     const cyRef = useRef(null);
 
     const graphModel = useMemo(() => buildGraphModel(learningPath), [learningPath]);

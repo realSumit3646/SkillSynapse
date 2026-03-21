@@ -68,7 +68,6 @@ async def analyze_skills_from_job_description(
         extracted,
         settings.max_output_skills,
     )
-<<<<<<< HEAD
 
     if not required_skills:
         raise HTTPException(
@@ -111,7 +110,3 @@ async def provide_feedback_and_reanalyze(user_feedback: str = Form(default=None)
     closest_map = analysis_state.closest_map or {}
 
     return finalize_metrics(required_skills, evidence, feedback, sim_map, closest_map)
-=======
-    return SkillExtractionResponse(skills=reduced)
-
->>>>>>> 0c869b27fffbc08e064c55fac294d7fe2623133a

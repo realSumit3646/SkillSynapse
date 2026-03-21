@@ -31,14 +31,14 @@ export default function LearningPathResources() {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     const isNodeRoute = Boolean(id);
-    const queryString = useMemo(() => {
+    const requestPayload = useMemo(() => {
         if (id) {
-            return `id=${encodeURIComponent(id)}`;
+            return { from: id, to: id };
         }
         if (from && to) {
-            return `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+            return { from, to };
         }
-        return "";
+        return null;
     }, [from, id, to]);
     const [requestState, setRequestState] = useState({
         loading: true,
@@ -59,7 +59,7 @@ export default function LearningPathResources() {
                 return;
             }
 
-            if (!queryString) {
+            if (!requestPayload) {
                 setRequestState({
                     loading: false,
                     error: "Missing resource query. Use id=... or from=...&to=....",
@@ -71,9 +71,13 @@ export default function LearningPathResources() {
             setRequestState({ loading: true, error: "", data: null });
 
             try {
-                const response = await fetch(
-                    `${backendUrl}/api/learning-path/resources?${queryString}`,
-                );
+                const response = await fetch(`${backendUrl}/get-resources`, {
+                    method: "POST",
+                    body: JSON.stringify(requestPayload),
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                });
 
                 if (!response.ok) {
                     throw new Error("Unable to load learning resources.");
@@ -99,7 +103,7 @@ export default function LearningPathResources() {
         return () => {
             active = false;
         };
-    }, [backendUrl, queryString]);
+    }, [backendUrl, requestPayload]);
 
     const result = requestState.data?.result;
     const title = isNodeRoute
@@ -186,33 +190,33 @@ export default function LearningPathResources() {
                                                 className="group rounded-[1.75rem] border border-slate-200 bg-slate-50 p-4 transition hover:border-sky-300 hover:bg-sky-50"
                                             >
                                                 <div className="flex items-start justify-between gap-3">
-                                                    <div className="min-w-0">
+                                                    <div className="min-w-0 flex-1">
                                                         <h3 className="text-base font-semibold text-slate-950">
                                                             {item.title}
                                                         </h3>
                                                         <p className="mt-1 text-sm text-slate-500">
                                                             {item.source}
                                                         </p>
+                                                        <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.12em]">
+                                                            <span className="rounded-full bg-slate-950 px-3 py-1 text-white">
+                                                                {item.level}
+                                                            </span>
+                                                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+                                                                Relevance {formatScore(item.relevance_score)}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                    <FiExternalLink className="mt-1 shrink-0 text-slate-400 transition group-hover:text-sky-700" />
+                                                    <div className="flex shrink-0 items-start gap-3">
+                                                        {item.image_url ? (
+                                                            <img
+                                                                src={item.image_url}
+                                                                alt={item.title}
+                                                                className="h-16 w-16 rounded-2xl object-cover"
+                                                            />
+                                                        ) : null}
+                                                        <FiExternalLink className="mt-1 shrink-0 text-slate-400 transition group-hover:text-sky-700" />
+                                                    </div>
                                                 </div>
-
-                                                <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.12em]">
-                                                    <span className="rounded-full bg-slate-950 px-3 py-1 text-white">
-                                                        {item.level}
-                                                    </span>
-                                                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-                                                        Relevance {formatScore(item.relevance_score)}
-                                                    </span>
-                                                </div>
-
-                                                {item.image_url ? (
-                                                    <img
-                                                        src={item.image_url}
-                                                        alt={item.title}
-                                                        className="mt-4 h-36 w-full rounded-3xl object-cover"
-                                                    />
-                                                ) : null}
                                             </a>
                                         ))}
                                     </div>

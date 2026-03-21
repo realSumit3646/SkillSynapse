@@ -12,10 +12,8 @@ const SLIDER_THUMB_SIZE = 20;
 function extractSkillsToRate(evaluationResult) {
     const skillGaps = evaluationResult?.skill_gaps;
 
-    if (Array.isArray(skillGaps) && skillGaps.length > 0) {
-        return skillGaps.map((skill) =>
-            typeof skill === "string" ? skill : skill.name ?? skill.skill ?? "Skill",
-        );
+    if (skillGaps && typeof skillGaps === "object") {
+        return Object.keys(skillGaps);
     }
 
     return sampleSkillsToRate;
@@ -28,23 +26,28 @@ export default function SkillRatings() {
     const [ratings, setRatings] = useState({});
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
     const navigate = useNavigate();
-    function handleSkillRatingSubmit() {
-        const response = fetch(`${backendUrl}/api/submit-ratings`, {
+    async function handleSkillRatingSubmit() {
+        const formData = new FormData();
+        formData.append("user_feedback", JSON.stringify(ratings));
+
+        const response = await fetch(`${backendUrl}/provide-feedback`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                ratings,
-            }),
+            body: formData,
         });
+
         if (response.ok) {
-            // Handle successful submission (e.g., navigate to learning path)
-            const result = response.json();
-            navigate("/learning-path", { state: { learningPath: result.learningPath } });
+            const result = await response.json();
+            const res = await fetch(`${backendUrl}/learning-path/from-skill-gaps`, {
+                method: "POST",
+                body: JSON.stringify(result),
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+            const learningPathResult = await res.json();
+            navigate("/learning-path", { state: { evaluationResult: learningPathResult } });
         } else {
             console.error("Error submitting ratings:", response.statusText);
-            // Handle error (e.g., display error message to user)
         }
     }
 

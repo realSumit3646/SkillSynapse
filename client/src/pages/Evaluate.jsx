@@ -137,10 +137,8 @@ export default function Evaluate() {
         state?.evaluationResult && Object.keys(state.evaluationResult).length
             ? state.evaluationResult
             : sampleEvaluationResult;
-    const skillGaps = Array.isArray(evaluationResult.skill_gaps)
-        ? evaluationResult.skill_gaps
-        : [];
-    const hasSkillGaps = skillGaps.length > 0;
+    const skillGaps = evaluationResult.skill_gaps ?? {};
+    const hasSkillGaps = Object.keys(skillGaps).length > 0;
 
     const skills = Object.entries(evaluationResult.all_skills ?? {}).map(
         ([skill, details]) => {
