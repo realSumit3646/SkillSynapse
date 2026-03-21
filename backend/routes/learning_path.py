@@ -7,6 +7,7 @@ from backend.learning_path.path_generator import LearningPathGenerator
 from backend.learning_path.dag_builder import DAGBuilder
 from backend.learning_path.prerequisite_extractor import PrerequisiteExtractor
 from backend.learning_path.config import learning_path_settings
+from backend.learning_path.skill_gap_converter import SkillGapConverter
 
 router = APIRouter(tags=["learning-path"], prefix="/learning-path")
 
@@ -230,4 +231,195 @@ async def get_graph(payload: LearningPathRequest) -> dict:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc)
+        ) from exc
+
+
+@router.post("/from-skill-gaps")
+async def generate_from_skill_gaps(payload: dict) -> dict:
+    """
+    Generate learning path directly from /extract-skills API output.
+    
+    This endpoint integrates with the skill extraction API and handles:
+    - Converting time format (days → weeks/days string)
+    - Building learning path from skill gaps
+    - Optionally filtering by confidence scores
+    
+    Request format (from /extract-skills):
+    ```json
+    {
+      "skill_gaps": {
+        "Python Programming": {
+          "difficulty": 4,
+          "time": 68,              // Days (integer)
+          "unlock_power": 11,
+          "prerequisites": []      // Optional
+        },
+        "Machine Learning": {
+          "difficulty": 7,
+          "time": 28,
+          "unlock_power": 9
+        }
+      },
+      "auto_extract_prerequisites": true,
+      "available_time_weeks": 24,
+      "max_difficulty_per_phase": 8
+    }
+    ```
+    
+    Returns:
+    ```json
+    {
+      "learning_sequence": ["Python Programming", "Machine Learning", ...],
+      "graph": {nodes: [...], edges: [...]},
+      "tracks": {primary: [...], secondary: [...], warmup: [...]},
+      "skill_stats": {
+        "total_skills": int,
+        "total_weeks": float,
+        "avg_difficulty": float,
+        "hardest_skill": str
+      }
+    }
+    ```
+    """
+    try:
+        # Extract skill gaps from payload
+        skill_gaps = payload.get("skill_gaps", {})
+        auto_extract_prerequisites = payload.get("auto_extract_prerequisites", True)
+        available_time_weeks = payload.get("available_time_weeks")
+        max_difficulty_per_phase = payload.get("max_difficulty_per_phase", 8)
+        
+        if not skill_gaps:
+            raise ValueError("skill_gaps cannot be empty")
+        
+        # Convert skill gaps format to learning path format
+        converted_metadata = SkillGapConverter.convert_extract_skills_to_learning_path(skill_gaps)
+        skills_to_learn = list(skill_gaps.keys())
+        
+        # Get statistics
+        skill_stats = SkillGapConverter.get_skill_stats(skill_gaps)
+        
+        # Generate learning path with converted format
+        path = await path_generator.generate_path(
+            skills_to_learn=skills_to_learn,
+            skill_metadata=converted_metadata,
+            auto_extract_prerequisites=auto_extract_prerequisites,
+            available_time_weeks=available_time_weeks,
+            max_difficulty_per_phase=max_difficulty_per_phase,
+        )
+        
+        return {
+            'learning_sequence': path.learning_sequence,
+            'graph': path.graph,
+            'tracks': path.tracks,
+            'scored_skills': [
+                {
+                    'name': s.name,
+                    'score': round(s.score, 2),
+                    'difficulty': s.difficulty,
+                    'time': s.time,
+                    'unlock_power': s.unlock_power
+                }
+                for s in path.scored_skills
+            ],
+            'prerequisites_map': path.prerequisites_map,
+            'skill_stats': skill_stats,
+            'metadata': path.metadata
+        }
+        
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating learning path from skill gaps: {str(exc)}"
+        ) from exc
+
+
+@router.post("/convert-format")
+async def convert_skill_format(payload: dict) -> dict:
+    """
+    Convert skill gaps format (from /extract-skills) to learning path format.
+    
+    Useful for testing format conversion and understanding the transformation.
+    
+    Request:
+    ```json
+    {
+      "skill_gaps": {
+        "Python Programming": {
+          "difficulty": 4,
+          "time": 68,
+          "unlock_power": 11
+        },
+        "Machine Learning": {
+          "difficulty": 7,
+          "time": 28,
+          "unlock_power": 9
+        }
+      }
+    }
+    ```
+    
+    Response:
+    ```json
+    {
+      "original": {...},
+      "converted": {
+        "Python Programming": {
+          "difficulty": 4,
+          "time": "9.7 weeks",
+          "unlock_power": 11
+        },
+        "Machine Learning": {
+          "difficulty": 7,
+          "time": "4 weeks",
+          "unlock_power": 9
+        }
+      },
+      "stats": {
+        "total_skills": 2,
+        "total_weeks": 13.7,
+        "avg_difficulty": 5.5
+      }
+    }
+    ```
+    """
+    try:
+        skill_gaps = payload.get("skill_gaps", {})
+        
+        if not skill_gaps:
+            raise ValueError("skill_gaps cannot be empty")
+        
+        # Convert format
+        converted = SkillGapConverter.convert_extract_skills_to_learning_path(skill_gaps)
+        stats = SkillGapConverter.get_skill_stats(skill_gaps)
+        
+        return {
+            'original': skill_gaps,
+            'converted': converted,
+            'stats': stats,
+            'notes': {
+                'time_format': 'Converted from days (integer) to human-readable string',
+                'example_conversions': {
+                    '7': '1 week',
+                    '14': '2 weeks',
+                    '68': '9.7 weeks',
+                    '90': '13 weeks',
+                    '3': '3 days'
+                }
+            }
+        }
+        
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error converting format: {str(exc)}"
         ) from exc
