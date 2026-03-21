@@ -1,10 +1,22 @@
 services:
-  web:
-    build: ./client  
-    ports:
-      - "3000:3000"
-      
   api:
-    build: ./backend  
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skillsynapse-api
+    restart: unless-stopped
     ports:
       - "8000:8000"
+
+  web:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: skillsynapse-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      - VITE_BACKEND_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
