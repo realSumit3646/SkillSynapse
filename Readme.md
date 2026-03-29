@@ -145,6 +145,5 @@ npm run dev -- --port 3000
 
 SkillSynapse is the GPS for career transitions: it diagnoses skill gaps and gives users the fastest, smartest route to their target role.
 
-## License
-
-Add license information (for example, MIT) before public release.
+This project was made in collaboration with teamates for an hackathon -
+My main contribution was to the development of api routes in backend using FastAPI for display of statistics, taking feedback and finding resources.  
