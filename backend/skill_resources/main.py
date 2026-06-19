@@ -40,9 +40,8 @@ def _load_env_file(path: str) -> None:
         pass
 
 
-# Try several candidate locations so this works both standalone and mounted
-# as a sub-app (where CWD is the repo root, not backend/).
-for _env_candidate in ("backend/.env", ".env", "../.env"):
+# Try several candidate locations: repo root run, backend/ run, Render secret files
+for _env_candidate in ("backend/.env", ".env", "../.env", "/etc/secrets/.env"):
     _load_env_file(_env_candidate)
 
 

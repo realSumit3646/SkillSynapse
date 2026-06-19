@@ -30,6 +30,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+@app.get("/health")
+@app.get("/healthz")
+async def health():
+    return {"status": "ok"}
+
+
 app.include_router(skills_router)
 app.include_router(learning_path_router)
 app.include_router(resources_router)
