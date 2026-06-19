@@ -11,7 +11,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSequence
 from langchain_google_genai import ChatGoogleGenerativeAI
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from backend.skill_proficiency.models import AnalyzeSkillsResponse, SkillMetrics
@@ -22,8 +22,6 @@ from backend.skill_proficiency.utils.common import (
     compute_unlock_power,
 )
 from backend.utils.config import settings
-
-EMBEDDING_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
 GEMINI_RUBRIC_INDICATORS: tuple[str, ...] = (
     "explicit_mention",
@@ -293,12 +291,15 @@ def detect_skills_with_evidence(text: str, required_skills: list[str]) -> dict[s
 
 
 def build_similarity_maps(required_skills: list[str], detected_skills: list[str]) -> tuple[dict[str, float], dict[str, str | None]]:
-    req_vectors = EMBEDDING_MODEL.encode(required_skills, convert_to_numpy=True, normalize_embeddings=True)
-
     if not detected_skills:
         return {s.lower(): 0.0 for s in required_skills}, {s.lower(): None for s in required_skills}
 
-    det_vectors = EMBEDDING_MODEL.encode(detected_skills, convert_to_numpy=True, normalize_embeddings=True)
+    all_texts = required_skills + detected_skills
+    vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4))
+    vectorizer.fit(all_texts)
+
+    req_vectors = vectorizer.transform(required_skills)
+    det_vectors = vectorizer.transform(detected_skills)
     sim_matrix = cosine_similarity(req_vectors, det_vectors)
 
     sim_map: dict[str, float] = {}
