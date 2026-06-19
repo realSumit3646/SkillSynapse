@@ -317,16 +317,16 @@ class GeminiResourceCurator:
             print("WARNING [curator]: GEMINI_API_KEY not set — YouTube/Websites/GitHub/Books will be empty.")
             return {}
         try:
-            import google.generativeai as genai  # always installed via google-generativeai
+            from langchain_google_genai import ChatGoogleGenerativeAI
 
-            genai.configure(api_key=self._api_key)
-            model = genai.GenerativeModel(
-                model_name="gemini-2.0-flash",
-                generation_config={"temperature": 0.15, "response_mime_type": "application/json"},
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-2.0-flash",
+                google_api_key=self._api_key,
+                temperature=0.15,
             )
             prompt = _CURATOR_PROMPT.format(from_skill=from_skill, to_skill=to_skill)
-            response = await asyncio.to_thread(model.generate_content, prompt)
-            content = _extract_json(response.text.strip())
+            response = await llm.ainvoke(prompt)
+            content = _extract_json(response.content.strip())
             data = json.loads(content)
             print(f"INFO [curator]: OK — got {sum(len(v) for v in data.values() if isinstance(v, list))} resources for {from_skill}→{to_skill}")
             return data if isinstance(data, dict) else {}
