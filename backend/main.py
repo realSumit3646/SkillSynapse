@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.routes.skills import router as skills_router
 from backend.routes.learning_path import router as learning_path_router
@@ -15,6 +16,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Starlette's ServerErrorMiddleware bypasses CORSMiddleware when it sends a 500,
+    # so the browser sees no Access-Control-Allow-Origin header and reports a misleading
+    # CORS error. Registering here keeps the response inside FastAPI's stack (inside
+    # CORSMiddleware), so CORS headers are always present.
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {exc}"},
+    )
+
 
 app.include_router(skills_router)
 app.include_router(learning_path_router)

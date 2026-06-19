@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import Home from "./pages/Home.jsx";
+import Loading from "./pages/Loading.jsx";
 import Evaluate from "./pages/Evaluate.jsx";
 import SkillRatings from "./pages/SkillRatings.jsx";
 import LearningPath from "./pages/LearningPath.jsx";
@@ -11,6 +12,10 @@ const router = createBrowserRouter([
     {
         path: "/",
         element: <Home />,
+    },
+    {
+        path: "/loading",
+        element: <Loading />,
     },
     {
         path: "/evaluate",

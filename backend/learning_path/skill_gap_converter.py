@@ -98,10 +98,10 @@ class SkillGapConverter:
             time_string = SkillGapConverter.days_to_time_string(int(time_days))
             
             converted[skill_name] = {
-                "difficulty": int(difficulty),
+                "difficulty": max(1, min(10, int(difficulty))),
                 "time": time_string,
-                "unlock_power": int(unlock_power),
-                "prerequisites": metadata.get("prerequisites", [])  # If exists
+                "unlock_power": max(1, int(unlock_power)),
+                "prerequisites": metadata.get("prerequisites", [])
             }
         
         return converted

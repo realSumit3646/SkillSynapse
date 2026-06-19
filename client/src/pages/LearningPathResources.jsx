@@ -19,9 +19,6 @@ const RESOURCE_SECTIONS = [
     { key: "documentation", label: "Documentation", icon: FiFileText },
 ];
 
-function formatScore(score) {
-    return typeof score === "number" ? score.toFixed(3) : score;
-}
 
 export default function LearningPathResources() {
     const { state } = useLocation();
@@ -111,7 +108,7 @@ export default function LearningPathResources() {
         : `Resources from ${from ?? "skill"} to ${to ?? "skill"}`;
 
     return (
-        <main className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fafc,#dbeafe_36%,#cbd5e1_72%,#0f172a_155%)] px-4 py-4 text-slate-900 sm:px-6 sm:py-6">
+        <main className="min-h-screen bg-[radial-gradient(ellipse_at_top_left,#ede9fe_0%,#f8f7ff_30%,#f1f5f9_65%,#e2e8f0_100%)] px-4 py-4 text-slate-900 sm:px-6 sm:py-6">
             <div className="mx-auto flex max-w-7xl flex-col gap-5">
                 <header className="rounded-4xl border border-white/60 bg-white/85 p-5 shadow-xl shadow-slate-900/5 backdrop-blur sm:p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -148,8 +145,12 @@ export default function LearningPathResources() {
                 </section>
 
                 {requestState.loading ? (
-                    <section className="rounded-4xl border border-slate-200/70 bg-white/90 p-8 text-sm text-slate-600 shadow-xl shadow-slate-900/5 backdrop-blur">
-                        Loading resource recommendations...
+                    <section className="flex flex-col items-center gap-4 rounded-4xl border border-slate-200/70 bg-white/90 p-12 shadow-xl shadow-slate-900/5 backdrop-blur">
+                        <svg className="h-8 w-8 spin-fast text-violet-500" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                            <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <p className="text-sm font-medium text-slate-500">Fetching curated resources — this may take a moment…</p>
                     </section>
                 ) : requestState.error ? (
                     <section className="rounded-4xl border border-rose-200 bg-rose-50 p-8 text-sm text-rose-700 shadow-xl shadow-rose-200/40">
@@ -201,8 +202,8 @@ export default function LearningPathResources() {
                                                             <span className="rounded-full bg-slate-950 px-3 py-1 text-white">
                                                                 {item.level}
                                                             </span>
-                                                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-                                                                Relevance {formatScore(item.relevance_score)}
+                                                            <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">
+                                                                {item.source}
                                                             </span>
                                                         </div>
                                                     </div>

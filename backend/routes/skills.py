@@ -75,7 +75,15 @@ async def analyze_skills_from_job_description(
             detail="No skills could be extracted from job_description.",
         )
 
-    evidence = detect_skills_with_evidence(normalized_resume_text, required_skills)
+    try:
+        evidence = detect_skills_with_evidence(normalized_resume_text, required_skills)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Skill evidence analysis failed: {exc}",
+        ) from exc
     detected_skills = [s for s, v in evidence.items() if v.get("mentions", 0.0) > 0.0]
     sim_map, closest_map = build_similarity_maps(required_skills, detected_skills)
 

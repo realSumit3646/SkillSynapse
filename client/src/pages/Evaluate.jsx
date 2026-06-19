@@ -212,7 +212,7 @@ export default function Evaluate() {
     );
 
     return (
-        <main className="min-h-screen bg-[radial-gradient(circle_at_top,#eff6ff,#dbeafe_34%,#cbd5e1_72%,#0f172a_150%)] px-4 py-4 text-slate-900 sm:px-6 sm:py-6">
+        <main className="min-h-screen bg-[radial-gradient(ellipse_at_top_left,#ede9fe_0%,#f8f7ff_30%,#f1f5f9_65%,#e2e8f0_100%)] px-4 py-4 text-slate-900 sm:px-6 sm:py-6">
             <div className="mx-auto flex max-w-7xl flex-col gap-5">
                 <header className="rounded-4xl border border-white/60 bg-white/80 p-5 shadow-xl shadow-slate-900/5 backdrop-blur sm:p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
