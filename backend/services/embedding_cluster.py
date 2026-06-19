@@ -8,7 +8,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSequence
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from sentence_transformers import SentenceTransformer
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -19,15 +18,16 @@ from backend.utils.text_utils import dedupe_preserve_order, display_name
 class EmbeddingClusterService:
     def __init__(self) -> None:
         self.use_gemini_embeddings = settings.use_gemini_embeddings
-        self.local_embedding_model = SentenceTransformer(settings.sentence_transformer_model)
-        self.embedding_model = self.local_embedding_model
+        self._local_embedding_model = None  # lazy-loaded only when Gemini is unavailable
         self.embedding_models = self._build_embedding_models(settings.gemini_embedding_model)
         self.embedding_model_idx = 0
 
         if self.use_gemini_embeddings and settings.gemini_api_key:
             self.embedding_model = self._build_embedding_client(self.embedding_models[self.embedding_model_idx])
-        elif self.use_gemini_embeddings and not settings.gemini_api_key:
+        else:
+            # No Gemini embeddings — fall back to local sentence-transformers
             self.use_gemini_embeddings = False
+            self.embedding_model = self._get_local_model()
 
         self.chat_models = self._build_chat_models(settings.gemini_chat_model)
         self.chat_model_idx = 0
@@ -73,6 +73,15 @@ Skills:
         parents = dedupe_preserve_order(parents)
         return parents[:max_skills]
 
+    def _get_local_model(self):
+        if self._local_embedding_model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                self._local_embedding_model = SentenceTransformer(settings.sentence_transformer_model)
+            except ImportError:
+                print("WARNING [embeddings]: sentence-transformers not installed. Set USE_GEMINI_EMBEDDINGS=true.")
+        return self._local_embedding_model
+
     def _embed(self, skills: list[str]) -> np.ndarray:
         if self.use_gemini_embeddings:
             while True:
@@ -86,10 +95,12 @@ Skills:
                         continue
 
                     self.use_gemini_embeddings = False
-                    self.embedding_model = self.local_embedding_model
                     break
 
-        vectors = self.local_embedding_model.encode(skills, convert_to_numpy=True, normalize_embeddings=True)
+        local = self._get_local_model()
+        if local is None:
+            raise RuntimeError("No embedding model available. Set GEMINI_API_KEY and USE_GEMINI_EMBEDDINGS=true, or install sentence-transformers.")
+        vectors = local.encode(skills, convert_to_numpy=True, normalize_embeddings=True)
         return np.asarray(vectors, dtype=np.float32)
 
     def _cluster(self, vectors: np.ndarray) -> np.ndarray:
