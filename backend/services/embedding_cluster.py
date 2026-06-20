@@ -17,16 +17,19 @@ from backend.utils.text_utils import dedupe_preserve_order, display_name
 
 class EmbeddingClusterService:
     def __init__(self) -> None:
-        self.use_gemini_embeddings = settings.use_gemini_embeddings
+        import os
+        # Use Gemini embeddings whenever an API key is available (env var or pydantic-settings)
+        gemini_key = settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", "").strip()
+        self.use_gemini_embeddings = bool(gemini_key)
         self._local_embedding_model = None  # lazy-loaded only when Gemini is unavailable
         self.embedding_models = self._build_embedding_models(settings.gemini_embedding_model)
         self.embedding_model_idx = 0
 
-        if self.use_gemini_embeddings and settings.gemini_api_key:
-            self.embedding_model = self._build_embedding_client(self.embedding_models[self.embedding_model_idx])
+        if self.use_gemini_embeddings:
+            self.embedding_model = self._build_embedding_client_with_key(
+                self.embedding_models[self.embedding_model_idx], gemini_key
+            )
         else:
-            # No Gemini embeddings — fall back to local sentence-transformers
-            self.use_gemini_embeddings = False
             self.embedding_model = self._get_local_model()
 
         self.chat_models = self._build_chat_models(settings.gemini_chat_model)
@@ -93,13 +96,13 @@ Skills:
                         self.embedding_model_idx += 1
                         self.embedding_model = self._build_embedding_client(self.embedding_models[self.embedding_model_idx])
                         continue
-
+                    print(f"WARNING [embeddings]: Gemini embedding failed ({type(exc).__name__}): {exc}")
                     self.use_gemini_embeddings = False
                     break
 
         local = self._get_local_model()
         if local is None:
-            raise RuntimeError("No embedding model available. Set GEMINI_API_KEY and USE_GEMINI_EMBEDDINGS=true, or install sentence-transformers.")
+            raise RuntimeError("GEMINI_API_KEY is set but Gemini embedding failed. Check logs above for the root cause.")
         vectors = local.encode(skills, convert_to_numpy=True, normalize_embeddings=True)
         return np.asarray(vectors, dtype=np.float32)
 
@@ -223,10 +226,13 @@ Skills:
 
     @staticmethod
     def _build_embedding_client(model_name: str) -> GoogleGenerativeAIEmbeddings:
-        return GoogleGenerativeAIEmbeddings(
-            google_api_key=settings.gemini_api_key,
-            model=model_name,
-        )
+        import os
+        key = settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", "").strip()
+        return GoogleGenerativeAIEmbeddings(google_api_key=key, model=model_name)
+
+    @staticmethod
+    def _build_embedding_client_with_key(model_name: str, api_key: str) -> GoogleGenerativeAIEmbeddings:
+        return GoogleGenerativeAIEmbeddings(google_api_key=api_key, model=model_name)
 
     @staticmethod
     def _is_rate_limit_error(exc: Exception) -> bool:
