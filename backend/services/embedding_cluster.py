@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from typing import Iterable
 
@@ -14,29 +15,32 @@ from sklearn.metrics.pairwise import cosine_similarity
 from backend.utils.config import settings
 from backend.utils.text_utils import dedupe_preserve_order, display_name
 
+# Tested working models (3072 dims each, confirmed via langchain-google-genai v2.1.10)
+_EMBEDDING_MODELS = [
+    "models/gemini-embedding-001",
+    "models/gemini-embedding-2-preview",
+    "models/gemini-embedding-2",
+]
+
 
 class EmbeddingClusterService:
     def __init__(self) -> None:
-        import os
-        # Use Gemini embeddings whenever an API key is available (env var or pydantic-settings)
-        gemini_key = settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", "").strip()
-        self.use_gemini_embeddings = bool(gemini_key)
-        self._local_embedding_model = None  # lazy-loaded only when Gemini is unavailable
-        self.embedding_models = self._build_embedding_models(settings.gemini_embedding_model)
-        self.embedding_model_idx = 0
+        # Read key from pydantic-settings or fall back to os.environ directly
+        self._api_key = (settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
 
-        if self.use_gemini_embeddings:
-            self.embedding_model = self._build_embedding_client_with_key(
-                self.embedding_models[self.embedding_model_idx], gemini_key
-            )
+        self._embedding_model_idx = 0
+        self._embedding_model: GoogleGenerativeAIEmbeddings | None = None
+
+        if self._api_key:
+            self._embedding_model = self._make_embedding_client(self._embedding_model_idx)
         else:
-            self.embedding_model = self._get_local_model()
+            print("WARNING [embeddings]: No GEMINI_API_KEY — falling back to TF-IDF for skill clustering.")
 
         self.chat_models = self._build_chat_models(settings.gemini_chat_model)
         self.chat_model_idx = 0
         self.naming_chain: RunnableSequence | None = None
-        if settings.allow_llm_cluster_naming and settings.gemini_api_key and self.chat_models:
-            naming_prompt = PromptTemplate.from_template(
+        if settings.allow_llm_cluster_naming and self._api_key and self.chat_models:
+            self.naming_prompt = PromptTemplate.from_template(
                 """
 Pick one representative skill from this list.
 Rules:
@@ -48,10 +52,13 @@ Skills:
 {skills}
 """.strip()
             )
-            self.naming_prompt = naming_prompt
             self.naming_chain = self._build_naming_chain(self.chat_models[self.chat_model_idx])
         else:
             self.naming_prompt = None
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def group_and_reduce(self, skills: Iterable[str], max_skills: int = 10) -> list[str]:
         unique_skills = dedupe_preserve_order(skills)
@@ -76,37 +83,50 @@ Skills:
         parents = dedupe_preserve_order(parents)
         return parents[:max_skills]
 
-    def _get_local_model(self):
-        if self._local_embedding_model is None:
-            try:
-                from sentence_transformers import SentenceTransformer
-                self._local_embedding_model = SentenceTransformer(settings.sentence_transformer_model)
-            except ImportError:
-                print("WARNING [embeddings]: sentence-transformers not installed. Set USE_GEMINI_EMBEDDINGS=true.")
-        return self._local_embedding_model
+    # ------------------------------------------------------------------
+    # Embedding
+    # ------------------------------------------------------------------
 
     def _embed(self, skills: list[str]) -> np.ndarray:
-        if self.use_gemini_embeddings:
+        if self._embedding_model is not None:
             while True:
                 try:
-                    vectors = self.embedding_model.embed_documents(skills)
+                    vectors = self._embedding_model.embed_documents(skills)
                     return np.asarray(vectors, dtype=np.float32)
                 except Exception as exc:
-                    next_idx = self.embedding_model_idx + 1
-                    if next_idx < len(self.embedding_models):
-                        print(f"WARNING [embeddings]: {self.embedding_models[self.embedding_model_idx]} failed ({type(exc).__name__}), trying {self.embedding_models[next_idx]}")
-                        self.embedding_model_idx = next_idx
-                        self.embedding_model = self._build_embedding_client(self.embedding_models[next_idx])
+                    next_idx = self._embedding_model_idx + 1
+                    if next_idx < len(_EMBEDDING_MODELS):
+                        print(
+                            f"WARNING [embeddings]: {_EMBEDDING_MODELS[self._embedding_model_idx]} failed "
+                            f"({type(exc).__name__}), trying {_EMBEDDING_MODELS[next_idx]}"
+                        )
+                        self._embedding_model_idx = next_idx
+                        self._embedding_model = self._make_embedding_client(next_idx)
                         continue
-                    print(f"WARNING [embeddings]: all Gemini embedding models exhausted. Last error: {exc}")
-                    self.use_gemini_embeddings = False
+                    print(f"WARNING [embeddings]: all Gemini models exhausted — falling back to TF-IDF. Error: {exc}")
+                    self._embedding_model = None
                     break
 
-        local = self._get_local_model()
-        if local is None:
-            raise RuntimeError("GEMINI_API_KEY is set but Gemini embedding failed. Check logs above for the root cause.")
-        vectors = local.encode(skills, convert_to_numpy=True, normalize_embeddings=True)
-        return np.asarray(vectors, dtype=np.float32)
+        return self._tfidf_embed(skills)
+
+    def _make_embedding_client(self, idx: int) -> GoogleGenerativeAIEmbeddings:
+        return GoogleGenerativeAIEmbeddings(
+            google_api_key=self._api_key,
+            model=_EMBEDDING_MODELS[idx],
+        )
+
+    @staticmethod
+    def _tfidf_embed(skills: list[str]) -> np.ndarray:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4))
+        matrix = vec.fit_transform(skills).toarray().astype(np.float32)
+        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        return matrix / norms
+
+    # ------------------------------------------------------------------
+    # Clustering
+    # ------------------------------------------------------------------
 
     def _cluster(self, vectors: np.ndarray) -> np.ndarray:
         if len(vectors) == 1:
@@ -114,7 +134,6 @@ Skills:
 
         similarity = cosine_similarity(vectors)
         distance = 1.0 - similarity
-
         model = AgglomerativeClustering(
             metric="precomputed",
             linkage="average",
@@ -133,14 +152,11 @@ Skills:
         clusters = []
         for _, item in grouped.items():
             cluster_vectors = np.asarray(item["vectors"], dtype=np.float32)
-            centroid = cluster_vectors.mean(axis=0)
-            clusters.append(
-                {
-                    "skills": item["skills"],
-                    "vectors": cluster_vectors,
-                    "centroid": centroid,
-                }
-            )
+            clusters.append({
+                "skills": item["skills"],
+                "vectors": cluster_vectors,
+                "centroid": cluster_vectors.mean(axis=0),
+            })
         return clusters
 
     @staticmethod
@@ -150,37 +166,29 @@ Skills:
         np.fill_diagonal(sim, -1.0)
         i, j = np.unravel_index(np.argmax(sim), sim.shape)
 
-        merged_skills = clusters[i]["skills"] + clusters[j]["skills"]
         merged_vectors = np.vstack([clusters[i]["vectors"], clusters[j]["vectors"]])
-        merged_centroid = merged_vectors.mean(axis=0)
-
-        new_clusters = []
-        for idx, c in enumerate(clusters):
-            if idx in (i, j):
-                continue
-            new_clusters.append(c)
-
-        new_clusters.append(
-            {
-                "skills": merged_skills,
-                "vectors": merged_vectors,
-                "centroid": merged_centroid,
-            }
-        )
+        new_clusters = [c for idx, c in enumerate(clusters) if idx not in (i, j)]
+        new_clusters.append({
+            "skills": clusters[i]["skills"] + clusters[j]["skills"],
+            "vectors": merged_vectors,
+            "centroid": merged_vectors.mean(axis=0),
+        })
         return new_clusters
 
     def _select_parent(self, skills: list[str], vectors: np.ndarray) -> str:
         if len(skills) == 1:
             return skills[0]
-
         if self.naming_chain:
-            llm_choice = self._safe_llm_parent(skills)
-            if llm_choice:
-                return llm_choice
-
+            choice = self._safe_llm_parent(skills)
+            if choice:
+                return choice
         centroid = vectors.mean(axis=0, keepdims=True)
         sim = cosine_similarity(vectors, centroid).flatten()
         return skills[int(np.argmax(sim))]
+
+    # ------------------------------------------------------------------
+    # LLM naming chain
+    # ------------------------------------------------------------------
 
     async def select_parent_async(self, skills: list[str]) -> str:
         if len(skills) == 1:
@@ -190,9 +198,7 @@ Skills:
                 try:
                     raw = await self.naming_chain.ainvoke({"skills": "\n".join(f"- {s}" for s in skills)})
                     candidate = raw.strip()
-                    if candidate in skills:
-                        return candidate
-                    return skills[0]
+                    return candidate if candidate in skills else skills[0]
                 except Exception as exc:
                     if self._is_rate_limit_error(exc) and self.chat_model_idx + 1 < len(self.chat_models):
                         self.chat_model_idx += 1
@@ -207,34 +213,25 @@ Skills:
         while True:
             try:
                 candidate = self.naming_chain.invoke({"skills": "\n".join(f"- {s}" for s in skills)}).strip()
-                if candidate in skills:
-                    return candidate
-                return None
+                return candidate if candidate in skills else None
             except Exception as exc:
                 if self._is_rate_limit_error(exc) and self.chat_model_idx + 1 < len(self.chat_models):
                     self.chat_model_idx += 1
                     self.naming_chain = self._build_naming_chain(self.chat_models[self.chat_model_idx])
                     continue
                 return None
-        return None
 
     def _build_naming_chain(self, model_name: str) -> RunnableSequence:
         llm = ChatGoogleGenerativeAI(
-            google_api_key=settings.gemini_api_key,
+            google_api_key=self._api_key,
             model=model_name.removeprefix("models/"),
             temperature=0,
         )
         return self.naming_prompt | llm | StrOutputParser()
 
-    @staticmethod
-    def _build_embedding_client(model_name: str) -> GoogleGenerativeAIEmbeddings:
-        import os
-        key = settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", "").strip()
-        return GoogleGenerativeAIEmbeddings(google_api_key=key, model=model_name)
-
-    @staticmethod
-    def _build_embedding_client_with_key(model_name: str, api_key: str) -> GoogleGenerativeAIEmbeddings:
-        return GoogleGenerativeAIEmbeddings(google_api_key=api_key, model=model_name)
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _is_rate_limit_error(exc: Exception) -> bool:
@@ -254,26 +251,11 @@ Skills:
             "models/gemini-3-flash-preview",
             "models/gemini-3.1-flash-lite-preview",
         ]
-        return EmbeddingClusterService._dedupe_models(candidates)
-
-    @staticmethod
-    def _build_embedding_models(primary: str) -> list[str]:
-        candidates = [
-            primary,
-            "models/gemini-embedding-001",
-            "models/gemini-embedding-2-preview",
-            "models/gemini-embedding-2",
-        ]
-        return EmbeddingClusterService._dedupe_models(candidates)
-
-    @staticmethod
-    def _dedupe_models(candidates: list[str]) -> list[str]:
-        models: list[str] = []
-        seen = set()
-        for model in candidates:
-            key = model.strip()
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            models.append(key)
-        return models
+        seen: set[str] = set()
+        result: list[str] = []
+        for m in candidates:
+            k = m.strip()
+            if k and k not in seen:
+                seen.add(k)
+                result.append(k)
+        return result

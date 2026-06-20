@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     gemini_api_key: Optional[str] = None
     gemini_chat_model: str = "gemini-3.1-flash-lite-preview"
-    gemini_embedding_model: str = "models/gemini-embedding-001"
+    gemini_embedding_model: str = "models/gemini-embedding-001"  # fallback only; service hardcodes tested models
     use_gemini_embeddings: bool = False
 
     sentence_transformer_model: str = "all-MiniLM-L6-v2"
