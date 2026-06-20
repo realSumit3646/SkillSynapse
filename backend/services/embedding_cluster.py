@@ -254,6 +254,8 @@ Skills:
             primary,
             "models/gemini-embedding-001",
             "models/gemini-embedding-2-preview",
+            "models/text-embedding-004",
+            "models/embedding-001",
         ]
         return EmbeddingClusterService._dedupe_models(candidates)
 
