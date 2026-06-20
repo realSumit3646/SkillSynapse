@@ -92,11 +92,13 @@ Skills:
                     vectors = self.embedding_model.embed_documents(skills)
                     return np.asarray(vectors, dtype=np.float32)
                 except Exception as exc:
-                    if self._is_rate_limit_error(exc) and self.embedding_model_idx + 1 < len(self.embedding_models):
-                        self.embedding_model_idx += 1
-                        self.embedding_model = self._build_embedding_client(self.embedding_models[self.embedding_model_idx])
+                    next_idx = self.embedding_model_idx + 1
+                    if next_idx < len(self.embedding_models):
+                        print(f"WARNING [embeddings]: {self.embedding_models[self.embedding_model_idx]} failed ({type(exc).__name__}), trying {self.embedding_models[next_idx]}")
+                        self.embedding_model_idx = next_idx
+                        self.embedding_model = self._build_embedding_client(self.embedding_models[next_idx])
                         continue
-                    print(f"WARNING [embeddings]: Gemini embedding failed ({type(exc).__name__}): {exc}")
+                    print(f"WARNING [embeddings]: all Gemini embedding models exhausted. Last error: {exc}")
                     self.use_gemini_embeddings = False
                     break
 
@@ -260,8 +262,7 @@ Skills:
             primary,
             "models/gemini-embedding-001",
             "models/gemini-embedding-2-preview",
-            "models/text-embedding-004",
-            "models/embedding-001",
+            "models/gemini-embedding-2",
         ]
         return EmbeddingClusterService._dedupe_models(candidates)
 
